@@ -20,7 +20,6 @@
         return uniqueId++ + "" + (new Date()).getTime();
     }
 
-    // Most functions are public so they can easily be overriden if need be
     navigation.parseQueryString = function (url) {
         if (url.indexOf("?") < 0) {
             return {};
@@ -111,12 +110,13 @@
         }
     };
 
-    navigation.typetoViewName = function (typeName) {
+    navigation.typeToViewName = function (typeName) {
         var template = typeName.replace("Model", "");
 
-        if (!document.getElementById(template)) {
-            throw new Error("Can't find a view template named " + template);
-        }
+        // Don't require template to exist.  Will be the case when using External Template Engine
+        //if (!document.getElementById(template)) {
+        //    throw new Error("Can't find a view template named " + template);
+        //}
 
         return template;
     };
@@ -133,12 +133,12 @@
             "ko.navigation.setNamespace(ns) or must provide a viewName property.");
         }
 
-        return navigation.typetoViewName(typeName);
+        return navigation.typeToViewName(typeName);
     }
 
     navigation.transition = {
         "default": function (fromElement, toElement, navigationType) {
-            if (fromElement) {
+            if (fromElement) { // fromElement won't be set for initial item
                 fromElement.style.display = "none";
             }
             toElement.style.display = "block";
@@ -227,6 +227,8 @@
             return transientItem() || persistentItem();
         });
 
+        // History.js has a stateId but we can't get access to it 
+        // directly after calling pushState but before statechange.
         var stateId = getUniqueId();
         var newUrl = History.emulated.pushState ? "?s=" + stateId : "?";
         var parameters = navigation.parseQueryString(document.URL);
@@ -241,9 +243,9 @@
             newUrl = newUrl + queryString;
         } else if (options.defaultViewModel) {
             viewModel = (
-                // Support using a factory/accessor function or a view model itself as the default
+            // Support using a factory/accessor function or a view model itself as the default
                 (typeof options.defaultViewModel == "function") ?
-                options.defaultViewModel() : 
+                options.defaultViewModel() :
                 options.defaultViewModel
             );
         }
@@ -391,9 +393,8 @@
     ko.bindingHandlers["navigation"] = {
         "init": function (element, valueAccessor) {
             var bindingValue = ko.utils.unwrapObservable(valueAccessor());
-            var model = bindingValue.data || bindingValue;
 
-            if (!model.currentItem || !model.navigationStack) {
+            if (!bindingValue.currentItem || !bindingValue.navigationStack) {
                 throw new Error("The navigation binding expects an object with 'currentItem' and "
                 + "'navigationStack' properties passed directly or in the data property of a config object.");
             }
@@ -406,20 +407,25 @@
                     throw new Error("The navigation item layout template should have one and only one top level element.");
                 }
 
-                new ko.templateSources.anonymousTemplate(element).text(trimmedHTML);
-                ko.utils.emptyDomNode(element);
-            } else {
-                var defaultTemplate = '<div data-bind="template: $data" style="display: none"></div>';
-                new ko.templateSources.anonymousTemplate(element).text(defaultTemplate);
+                // Can't use this.  ko.utils.emptyDomNode is not exported, breaks on minified version of ko
+                //new ko.templateSources.anonymousTemplate(element).text(trimmedHTML);
+                //ko.utils.emptyDomNode(element);
+
+                element.innerHTML = trimmedHTML;
+                return ko.bindingHandlers["template"]["init"](element, valueAccessor);
             }
+
+            // Else its empty, we will provide a default template
+            var defaultTemplate = '<div data-bind="template: $data" style="display: none"></div>';
+            new ko.templateSources.anonymousTemplate(element).text(defaultTemplate);
 
             return { "controlsDescendantBindings": true };
         },
         "update": function (element, valueAccessor, allBindingsAccessor, parentViewModel, bindingContext) {
             var accessor = function () {
                 var bindingValue = valueAccessor();
-                var model = bindingValue.data || bindingValue;
-                var transitionKey = bindingValue.transitionKey || "default";
+                var allBindings = allBindingsAccessor();
+                var transitionKey = allBindings["transitionKey"] || "default";
                 var currentElement = null;
                 var currentViewModel = null;
                 var transientItems = ko.observableArray();
@@ -429,14 +435,14 @@
                 // a transient navigation.  The ko.navigation.NavigationModel does this, but if a
                 // developer needs to implement their own navigation view model, this is an implicit
                 // contract of this binding handler.
-                model.currentItem.subscribe(function (value) {
-                    if (model.navigationStack.indexOf(value) == -1) {
+                bindingValue.currentItem.subscribe(function (value) {
+                    if (bindingValue.navigationStack.indexOf(value) == -1) {
                         transientItems.push(value);
                     }
                 });
 
                 var bindingStack = ko.dependentObservable(function () {
-                    var combined = model.navigationStack().concat(transientItems());
+                    var combined = bindingValue.navigationStack().concat(transientItems());
                     return ko.utils.arrayGetDistinctValues(combined);
                 });
 
@@ -449,7 +455,7 @@
 
                         ko.dependentObservable({
                             read: function () {
-                                if (model.currentItem() === viewModel && currentViewModel !== viewModel) {
+                                if (bindingValue.currentItem() === viewModel && currentViewModel !== viewModel) {
                                     var navigationType;
                                     var fromTransient = transientItems.indexOf(currentViewModel) != -1;
                                     var toTransient = transientItems.indexOf(viewModel) != -1;
@@ -466,8 +472,8 @@
                                     } else if (toTransient) {
                                         navigationType = "ToTransient";
                                     } else {
-                                        var currentIndex = model.navigationStack.indexOf(currentViewModel);
-                                        var newIndex = model.navigationStack.indexOf(viewModel);
+                                        var currentIndex = bindingValue.navigationStack.indexOf(currentViewModel);
+                                        var newIndex = bindingValue.navigationStack.indexOf(viewModel);
                                         var jump = newIndex - currentIndex;
 
                                         if (jump == 1) {
