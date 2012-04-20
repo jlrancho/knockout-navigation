@@ -1,4 +1,8 @@
-﻿(function () {
+﻿// knockout-navigation
+// (c) Johnny L. Rancho - https://github.com/jlrancho/knockout-navigation
+// License: MIT (http://www.opensource.org/licenses/mit-license.php)
+
+(function () {
     if (!String.prototype.trim) {
         String.prototype.trim = function () {
             return this.replace(/^\s+|\s+$/g, "");
