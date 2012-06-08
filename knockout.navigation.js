@@ -126,6 +126,8 @@
     };
 
     navigation.resolveView = function (viewModel) {
+        if (!viewModel) return null;
+
         if (viewModel.viewName) {
             return viewModel.viewName;
         }
@@ -385,7 +387,12 @@
                 var bindingValue = ko.utils.unwrapObservable(valueAccessor());
                 var autoResolve = ko.utils.domData.get(element, autoResolveDomDataKey);
 
-                if (autoResolve) bindingValue.name = navigation.resolveView;
+                if (autoResolve) {
+                    return {
+                        name: navigation.resolveView,
+                        data: bindingValue
+                    };
+                }
 
                 return bindingValue;
             };
